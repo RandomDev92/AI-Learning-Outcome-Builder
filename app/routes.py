@@ -8,11 +8,10 @@ from .models import Unit
 main = Blueprint('main', __name__)
 
 
-@main.route('/main-page')
+@main.route('/home-page')
 @main.route('/')
-@login_required
 def main_page(): 
-    return render_template('main_page.html', title=f'{current_user.username} Dashboard', username=current_user.username)
+    return render_template('homepage_purebs.html', title="Homepage")
 
 @main.route('/base')
 @login_required
