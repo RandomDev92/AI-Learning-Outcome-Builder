@@ -13,6 +13,15 @@ main = Blueprint('main', __name__)
 def main_page(): 
     return render_template('homepage_purebs.html', title="Homepage")
 
+@main.route('/explore')
+def explore():
+    return render_template('main_page.html', title="Explore")
+
+@main.route('/login')
+@login_required
+def login():
+    return render_template('main_page.html', title=f'{current_user.username} Dashboard', username=current_user.username)
+
 @main.route('/base')
 @login_required
 def base_main(): 
