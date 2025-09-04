@@ -54,3 +54,7 @@ def new_unit():
         db.session.commit()
         flash("Unit Created", 'success')
         return redirect("/main-page")
+    
+@main.route('/view-units')
+def view_units():
+    return render_template('view.html', title='All Units', username=current_user.username)
