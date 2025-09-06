@@ -26,11 +26,35 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  document.getElementById('evaluateBtn')?.addEventListener('click', async () => {
-    const panel = document.getElementById('evaluationPanel');
-    panel.textContent = 'Evaluating…';
-    const res = await fetch(AI_EVALUATE_URL, { method: 'POST' });
-    panel.innerHTML = await res.text();
-  });
+document.getElementById("evaluateBtn")?.addEventListener("click", async () => {
+  const p = document.getElementById("evaluationPanel");
+  p.innerHTML = "Saving…";
+
+  try {
+    const saveForm = document.querySelector('form[action*="lo_save"]');
+    if (saveForm) {
+      const fd = new FormData(saveForm);
+      await fetch(saveForm.action, {
+        method: "POST",
+        body: fd
+      });
+    }
+
+    p.innerHTML = "Evaluating…";
+    const res = await fetch(`${AI_EVALUATE_URL}?unit_id=${encodeURIComponent(UNIT_ID)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unit_id: UNIT_ID })
+    });
+    const data = await res.json();
+
+    if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    p.innerHTML = data.html;
+  } catch (err) {
+    p.innerHTML = `<div class="text-danger">❌ AI evaluation failed: ${String(err)}`;
+  }
+});
+
 })();
 });
