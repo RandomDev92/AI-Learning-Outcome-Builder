@@ -8,7 +8,6 @@ from .models import Unit
 main = Blueprint('main', __name__)
 
 
-@main.route('/home-page')
 @main.route('/')
 def main_page(): 
     return render_template('homepage_purebs.html', title="Homepage")
