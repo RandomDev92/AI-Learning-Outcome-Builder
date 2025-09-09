@@ -10,7 +10,6 @@ from sqlalchemy import case, update
 main = Blueprint('main', __name__)
 
 
-@main.route('/main_page')
 @main.route('/')
 def main_page(): 
     return render_template('homepage_purebs.html', title="Homepage")
@@ -18,6 +17,7 @@ def main_page():
 @main.route('/explore')
 def explore():
     return render_template('main_page2.html', title="Explore")
+#to create a guest main page..
 
 @main.route('/login')
 @login_required
@@ -203,4 +203,11 @@ def AI_reset():
             flash("Settings Successfully Reset to Default.", 'success')
             return jsonify({'status': 'ok'})
         return "Failed To Reset To Default", 500
-    
+
+
+@main.route('/admin-page')
+@login_required
+def admin_page():
+    if current_user.userType != UserType.ADMIN:
+        return "Unauthorised", 401
+    return render_template('admin_page_template.html')
