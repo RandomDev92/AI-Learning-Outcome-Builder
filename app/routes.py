@@ -10,6 +10,7 @@ from sqlalchemy import case, update
 main = Blueprint('main', __name__)
 
 
+@main.route('/main_page')
 @main.route('/')
 def main_page(): 
     return render_template('homepage_purebs.html', title="Homepage")
@@ -22,39 +23,6 @@ def explore():
 @login_required
 def login():
     return render_template('main_page2.html', title=f'{current_user.username} Dashboard', username=current_user.username)
-
-@main.route('/main-page2')
-def main_page2(): 
-    return render_template('main_page2.html' )
-
-@main.route('/navbar')
-def navbar():
-    return render_template('admin_page.html')
-
-@main.route('/base')
-@login_required
-def base_main(): 
-    return render_template('base_main.html', title=f'{current_user.username} Dashboard', username=current_user.username)
-
-@main.route('/search')
-def search():
-    return render_template('search_unit.html', title="Search Units")
-
-@main.route('/new-unit', methods = ['GET', 'POST'])
-def new():
-    form = NewUnitForm()
-    if form.validate_on_submit():
-        data = request.form
-        newUnit = Unit(unitcode=data["unitcode"], 
-                       unitname=data["unitname"], 
-                       level=data["level"], 
-                       creditpoints=data["creditpoints"], 
-                       description=data["description"])
-        db.session.add(newUnit)
-        db.session.commit()
-        flash("Unit Created", 'success')
-        return redirect("/main-page2")
-    return render_template('new_unit_form.html', title="New Unit", form=form)
 
 @main.route('/create-lo')
 @login_required
@@ -164,7 +132,7 @@ def new_unit():
         db.session.add(newUnit)
         db.session.commit()
         flash("Unit Created", 'success')
-        return redirect("/main-page")
+        return redirect("/main_page")
 
 #small helper functions
 def listToStringByComma(List):
