@@ -125,7 +125,7 @@ def new_unit():
         if not form.validate():
             return render_template('new_unit_form.html', title=f'Create New Unit', username=current_user.username, form=form)
         data = request.form
-        newUnit = Unit(unitcode=data["unitcode"], unitname=data["unitname"], level=data["level"], creditpoints=data["creditpoints"], description=data["description"])
+        newUnit = Unit(unitcode=data["unitcode"], unitname=data["unitname"], level=data["level"], creditpoints=data["creditpoints"], description=data["description"],user_id=current_user.id)
         db.session.add(newUnit)
         db.session.commit()
         flash("Unit Created", 'success')
@@ -201,3 +201,202 @@ def AI_reset():
             return jsonify({'status': 'ok'})
         return "Failed To Reset To Default", 500
     
+
+
+
+@main.route('/import-units', methods=['POST'])
+@login_required
+def import_units():
+    import csv
+    import io
+    import pandas as pd
+    from io import TextIOWrapper
+
+    file = request.files.get("import_file")
+    if not file:
+        flash("No file uploaded", "danger")
+        return redirect(url_for("main.main_page"))
+
+    filename = file.filename.lower()
+    defaults_applied = False
+    duplicates = []
+
+    def safe_int(value, default):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            defaults_applied = True
+            return default
+
+
+    try:
+        rows = []
+
+        # --- Read file ---
+        if filename.endswith(".csv"):
+            file.stream.seek(0)
+            content = file.read().decode("utf-8")
+            stream = io.StringIO(content)
+            reader = csv.reader(stream)
+            rows = list(reader)
+
+        elif filename.endswith(".xlsx"):
+            df = pd.read_excel(file, header=None, engine="openpyxl")
+            rows = df.values.tolist()
+        else:
+            flash("Unsupported file format. Upload CSV or Excel.", "danger")
+            return redirect(url_for("main.main_page"))
+
+        # --- Detect headers ---
+        first_row = rows[0]
+        header_keywords = ["unitcode", "unitname", "level", "creditpoints", "description"]
+        if any(str(cell).lower() in header_keywords for cell in first_row):
+            # File has headers
+            if filename.endswith(".csv"):
+                stream.seek(0)
+                reader = csv.DictReader(stream)
+                header_map = {
+                    "code": "unitcode",
+                    "title": "unitname",
+                    "level": "level",
+                    "Assessments": "creditpoints",  # not present, so will be None
+                    "Content": "description"
+                }
+
+                mapped_rows = []
+                for row in reader:  # use reader, not rows
+                    mapped_row = {}
+                    for csv_key, model_key in header_map.items():
+                        mapped_row[model_key] = row.get(csv_key)
+                    # Set creditpoints to 6 if missing or None
+                    if not mapped_row.get("creditpoints"):
+                        mapped_row["creditpoints"] = 6
+                    mapped_rows.append(mapped_row)
+                rows = mapped_rows
+            else:
+                df = pd.read_excel(file, engine="openpyxl")
+                rows = df.to_dict(orient="records")
+        else:
+            # No headers → smart parser
+            formatted_rows = []
+            for row in rows:
+                row = [str(cell).strip() if cell not in [None, ""] else None for cell in row]
+                unitcode = unitname = level = creditpoints = description = None
+
+                if len(row) >= 5:
+                    unitcode, unitname, level, creditpoints, description = row[:5]
+                elif len(row) == 4:
+                    unitcode, unitname, level, creditpoints = row
+                elif len(row) == 3:
+                    unitcode, unitname, level = row
+                elif len(row) == 2:
+                    unitcode, unitname = row
+                elif len(row) == 1:
+                    unitcode = row[0]
+
+                # Smart auto-detection: if unitname is numeric
+                if unitname and str(unitname).isdigit():
+                    description = creditpoints
+                    creditpoints = level
+                    level = unitname
+                    unitname = None
+
+                formatted_rows.append({
+                    "unitcode": unitcode,
+                    "unitname": unitname,
+                    "level": level,
+                    "creditpoints": creditpoints,
+                    "description": description
+                })
+            rows = formatted_rows
+
+        # --- Process rows ---
+        for row in rows:
+            unit_code = row.get("unitcode")
+            unit_name = row.get("unitname")
+            level = row.get("level")
+            credit_points = row.get("creditpoints")
+            description = row.get("description")
+
+            # Apply defaults and safe conversions
+            if not unit_name or (isinstance(unit_name, float) and pd.isna(unit_name)):
+                unit_name = "default name"
+                defaults_applied = True
+
+            level = safe_int(level, 1)
+            credit_points = safe_int(credit_points, 6)
+
+            if not description or (isinstance(description, float) and pd.isna(description)):
+                # If description missing, try last column text
+                if isinstance(row.get("creditpoints"), str):
+                    description = row.get("creditpoints")
+                else:
+                    description = "no description"
+                defaults_applied = True
+
+            if unit_code:
+                existing = Unit.query.filter_by(unitcode=unit_code).first()
+                if existing:
+                    duplicates.append(unit_code)
+                else:
+                    new_unit = Unit(
+                        unitcode=unit_code,
+                        unitname=str(unit_name),
+                        level=int(level),
+                        creditpoints=int(credit_points),
+                        description=str(description),
+                        user_id=current_user.id
+                    )
+                    db.session.add(new_unit)
+
+        db.session.commit()
+
+        # Flash success messages
+        msg = "Units added successfully from file."
+        if defaults_applied:
+            msg += " Missing fields were filled with default values."
+        if duplicates:
+            msg += f" {len(duplicates)} units were skipped due to duplication."
+        flash(msg, "success")
+
+    except Exception as e:
+        flash(f"Error processing file: {str(e)}", "danger")
+
+    return redirect(url_for("main.main_page"))
+
+
+
+
+
+
+@main.route('/export_units')
+@login_required
+def export_units():
+    import csv, io
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Unit Code", "Unit Name", "Level", "Credit Points", "Unit Description",
+        "Outcome Description", "Assessment", "Outcome Position"
+    ])
+
+    units = Unit.query.filter_by(user_id=current_user.id).all()
+
+    for unit in units:
+        for lo in unit.learning_outcomes:
+            writer.writerow([
+                unit.unitcode,
+                unit.unitname,
+                unit.level,
+                unit.creditpoints,
+                unit.description,
+                lo.description,
+                lo.assessment or "",
+                lo.position
+            ])
+    out = buf.getvalue()
+    return (out, 200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="units_and_outcomes.csv"'
+    })
